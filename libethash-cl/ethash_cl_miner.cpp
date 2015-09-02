@@ -509,6 +509,7 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 		unsigned buf = 0;
 		random_device engine;
 		uint64_t start_nonce = uniform_int_distribution<uint64_t>()(engine);
+		start_nonce = 0;
 		for (;; start_nonce += m_globalWorkSize)
 		{
 			auto t = chrono::high_resolution_clock::now();
