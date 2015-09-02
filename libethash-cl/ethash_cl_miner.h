@@ -85,8 +85,7 @@ private:
 	cl::Context m_context;
 	cl::CommandQueue m_queue;
 	cl::Kernel m_searchKernel;
-	unsigned int m_dagChunksCount;
-	std::vector<cl::Buffer> m_dagChunks;
+	cl::Buffer m_dag;
 	cl::Buffer m_header;
 	cl::Buffer m_hashBuffer[c_bufferCount];
 	cl::Buffer m_searchBuffer[c_bufferCount];

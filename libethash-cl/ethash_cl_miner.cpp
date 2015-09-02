@@ -397,13 +397,12 @@ bool ethash_cl_miner::init(
 		// create buffer for dag
 		try
 		{
-			m_dagChunksCount = 1;
 			ETHCL_LOG("Creating one big buffer for the DAG");
-			m_dagChunks.push_back(cl::Buffer(m_context, CL_MEM_READ_ONLY, _dagSize));
+			m_dag = cl::Buffer(m_context, CL_MEM_READ_ONLY, _dagSize);
 			ETHCL_LOG("Loading single big chunk kernels");
 			m_searchKernel = cl::Kernel(program, "ethash_search");
 			ETHCL_LOG("Mapping one big chunk.");
-			m_queue.enqueueWriteBuffer(m_dagChunks[0], CL_TRUE, 0, _dagSize, _dag);
+			m_queue.enqueueWriteBuffer(m_dag, CL_TRUE, 0, _dagSize, _dag);
 		}
 		catch (cl::Error const& err)
 		{
@@ -455,13 +454,11 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 			m_queue.enqueueBarrierWithWaitList(NULL, &pre_return_event);
 		else
 #endif
-		unsigned argPos = 2;
 		m_searchKernel.setArg(1, m_header);
-		for (unsigned i = 0; i < m_dagChunksCount; ++i, ++argPos)
-			m_searchKernel.setArg(argPos, m_dagChunks[i]);
+		m_searchKernel.setArg(2, m_dag);
 		// pass these to stop the compiler unrolling the loops
-		m_searchKernel.setArg(argPos + 1, target);
-		m_searchKernel.setArg(argPos + 2, ~0u);
+		m_searchKernel.setArg(4, target);
+		m_searchKernel.setArg(5, ~0u);
 
 		unsigned buf = 0;
 		random_device engine;
@@ -472,10 +469,7 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 			auto t = chrono::high_resolution_clock::now();
 			// supply output buffer to kernel
 			m_searchKernel.setArg(0, m_searchBuffer[buf]);
-			if (m_dagChunksCount == 1)
-				m_searchKernel.setArg(3, start_nonce);
-			else
-				m_searchKernel.setArg(6, start_nonce);
+			m_searchKernel.setArg(3, start_nonce);
 
 			// execute it!
 			m_queue.enqueueNDRangeKernel(m_searchKernel, cl::NullRange, m_globalWorkSize, s_workgroupSize);
