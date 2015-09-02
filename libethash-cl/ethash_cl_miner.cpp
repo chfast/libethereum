@@ -496,8 +496,6 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 			m_queue.enqueueBarrierWithWaitList(NULL, &pre_return_event);
 		else
 #endif
-			m_queue.finish();
-
 		unsigned argPos = 2;
 		m_searchKernel.setArg(1, m_header);
 		for (unsigned i = 0; i < m_dagChunksCount; ++i, ++argPos)
