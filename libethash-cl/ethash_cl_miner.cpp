@@ -397,59 +397,18 @@ bool ethash_cl_miner::init(
 		// create buffer for dag
 		try
 		{
-			m_dagChunksCount = 1;
 			ETHCL_LOG("Creating one big buffer for the DAG");
-			m_dagChunks.push_back(cl::Buffer(m_context, CL_MEM_READ_ONLY, _dagSize));
+			m_dag = cl::Buffer(m_context, CL_MEM_READ_ONLY, _dagSize);
 			ETHCL_LOG("Loading single big chunk kernels");
 			m_hashKernel = cl::Kernel(program, "ethash_hash");
 			m_searchKernel = cl::Kernel(program, "ethash_search");
 			ETHCL_LOG("Mapping one big chunk.");
-			m_queue.enqueueWriteBuffer(m_dagChunks[0], CL_TRUE, 0, _dagSize, _dag);
+			m_queue.enqueueWriteBuffer(m_dag, CL_TRUE, 0, _dagSize, _dag);
 		}
 		catch (cl::Error const& err)
 		{
 			ETHCL_LOG("Allocating/mapping single buffer failed with: " << err.what() << "(" << err.err() << "). GPU can't allocate the DAG in a single chunk. Bailing.");
 			return false;
-#if 0		// Disabling chunking for release since it seems not to work. Never manages to mine a block. TODO: Fix when time is found.
-			int errCode = err.err();
-			if (errCode != CL_INVALID_BUFFER_SIZE || errCode != CL_MEM_OBJECT_ALLOCATION_FAILURE)
-				ETHCL_LOG("Allocating/mapping single buffer failed with: " << err.what() << "(" << errCode << ")");
-			cl_ulong result;
-			// if we fail midway on the try above make sure we start clean
-			m_dagChunks.clear();
-			device.getInfo(CL_DEVICE_MAX_MEM_ALLOC_SIZE, &result);
-			ETHCL_LOG(
-				"Failed to allocate 1 big chunk. Max allocateable memory is "
-				<< result << ". Trying to allocate 4 chunks."
-			);
-			// The OpenCL kernel has a hard coded number of 4 chunks at the moment
-			m_dagChunksCount = 4;
-			for (unsigned i = 0; i < m_dagChunksCount; i++)
-			{
-				// TODO Note: If we ever change to _dagChunksNum other than 4, then the size would need recalculation
-				ETHCL_LOG("Creating buffer for chunk " << i);
-				m_dagChunks.push_back(cl::Buffer(
-					m_context,
-					CL_MEM_READ_ONLY,
-					(i == 3) ? (_dagSize - 3 * ((_dagSize >> 9) << 7)) : (_dagSize >> 9) << 7
-				));
-			}
-			ETHCL_LOG("Loading chunk kernels");
-			m_hashKernel = cl::Kernel(program, "ethash_hash_chunks");
-			m_searchKernel = cl::Kernel(program, "ethash_search_chunks");
-			// TODO Note: If we ever change to _dagChunksNum other than 4, then the size would need recalculation
-			void* dag_ptr[4];
-			for (unsigned i = 0; i < m_dagChunksCount; i++)
-			{
-				ETHCL_LOG("Mapping chunk " << i);
-				dag_ptr[i] = m_queue.enqueueMapBuffer(m_dagChunks[i], true, m_openclOnePointOne ? CL_MAP_WRITE : CL_MAP_WRITE_INVALIDATE_REGION, 0, (i == 3) ? (_dagSize - 3 * ((_dagSize >> 9) << 7)) : (_dagSize >> 9) << 7);
-			}
-			for (unsigned i = 0; i < m_dagChunksCount; i++)
-			{
-				memcpy(dag_ptr[i], (char *)_dag + i*((_dagSize >> 9) << 7), (i == 3) ? (_dagSize - 3 * ((_dagSize >> 9) << 7)) : (_dagSize >> 9) << 7);
-				m_queue.enqueueUnmapMemObject(m_dagChunks[i], dag_ptr[i]);
-			}
-#endif
 		}
 		// create buffer for header
 		ETHCL_LOG("Creating buffer for header.");
@@ -496,13 +455,11 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 			m_queue.enqueueBarrierWithWaitList(NULL, &pre_return_event);
 		else
 #endif
-		unsigned argPos = 2;
 		m_searchKernel.setArg(1, m_header);
-		for (unsigned i = 0; i < m_dagChunksCount; ++i, ++argPos)
-			m_searchKernel.setArg(argPos, m_dagChunks[i]);
+		m_searchKernel.setArg(2, m_dag);
 		// pass these to stop the compiler unrolling the loops
-		m_searchKernel.setArg(argPos + 1, target);
-		m_searchKernel.setArg(argPos + 2, ~0u);
+		m_searchKernel.setArg(4, target);
+		m_searchKernel.setArg(5, ~0u);
 
 		unsigned buf = 0;
 		random_device engine;
@@ -513,10 +470,7 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 			auto t = chrono::high_resolution_clock::now();
 			// supply output buffer to kernel
 			m_searchKernel.setArg(0, m_searchBuffer[buf]);
-			if (m_dagChunksCount == 1)
-				m_searchKernel.setArg(3, start_nonce);
-			else
-				m_searchKernel.setArg(6, start_nonce);
+			m_searchKernel.setArg(3, start_nonce);
 
 			// execute it!
 			m_queue.enqueueNDRangeKernel(m_searchKernel, cl::NullRange, m_globalWorkSize, s_workgroupSize);
