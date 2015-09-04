@@ -302,7 +302,7 @@ public:
 #if ETH_ETHASHCL || !ETH_TRUE
 			EthashGPUMiner::listDevices();
 #endif
-			exit(0);
+			return;
 		}
 
 		if (m_minerType == "cpu")
@@ -392,7 +392,6 @@ private:
 		h256 seedHash = EthashAux::seedHash(_n);
 		cout << "Initializing DAG for epoch beginning #" << (_n / 30000 * 30000) << " (seedhash " << seedHash.abridged() << "). This will take a while." << endl;
 		EthashAux::full(seedHash, true);
-		exit(0);
 	}
 
 	void doBenchmark(std::string _m, bool _phoneHome, unsigned _warmupDuration = 15, unsigned _trialDuration = 3, unsigned _trials = 5)
@@ -472,7 +471,6 @@ private:
 			}
 		}
 #endif
-		exit(0);
 	}
 
 	// dummy struct for special exception.
@@ -583,7 +581,6 @@ private:
 			}
 
 #endif
-		exit(0);
 	}
 
 	void doSearch(MinerType _m)
@@ -625,10 +622,9 @@ private:
 
 		Timer t;
 		while (!finished)
-			this_thread::sleep_for(chrono::seconds(1));
+			this_thread::sleep_for(chrono::milliseconds(100));
 
 		cout << "Finished in " << t.elapsed() << endl;
-		std::exit(0);
 	}
 
 	/// Operating mode.
