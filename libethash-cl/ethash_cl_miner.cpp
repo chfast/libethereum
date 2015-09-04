@@ -24,6 +24,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <csignal>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -86,13 +87,31 @@ static void addDefinition(string& _source, char const* _id, unsigned _value)
 
 ethash_cl_miner::search_hook::~search_hook() {}
 
+static bool s_sigHandlerOn = false;
+static ethash_cl_miner* s_instance;
+
+static void sigIntHandler(int)
+{
+	std::cerr << "SIGINT\n";
+	if (s_instance)
+		s_instance->~ethash_cl_miner();
+	//std::quick_exit(0);
+}
+
 ethash_cl_miner::ethash_cl_miner()
 :	m_openclOnePointOne()
 {
+	s_instance = this;
+	if (!s_sigHandlerOn)
+	{
+		std::signal(SIGINT, sigIntHandler);
+		s_sigHandlerOn = true;
+	}
 }
 
 ethash_cl_miner::~ethash_cl_miner()
 {
+	s_instance = nullptr;
 	finish();
 }
 
@@ -311,8 +330,12 @@ void ethash_cl_miner::listDevices()
 
 void ethash_cl_miner::finish()
 {
+	ETHCL_LOG("Finishing...");
 	if (m_queue())
+	{
 		m_queue.finish();
+		ETHCL_LOG("Finished.");
+	}
 }
 
 bool ethash_cl_miner::init(
@@ -464,7 +487,7 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 		unsigned buf = 0;
 		random_device engine;
 		uint64_t start_nonce = uniform_int_distribution<uint64_t>()(engine);
-		//start_nonce = 0;
+		start_nonce = 0;
 		for (;; start_nonce += m_globalWorkSize)
 		{
 			auto t = chrono::high_resolution_clock::now();

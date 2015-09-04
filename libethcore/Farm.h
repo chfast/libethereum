@@ -57,6 +57,7 @@ public:
 
 	~GenericFarm()
 	{
+		std::cerr << "Farm destroyed.\n";
 		stop();
 	}
 
