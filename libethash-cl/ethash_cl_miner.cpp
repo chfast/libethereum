@@ -423,7 +423,6 @@ bool ethash_cl_miner::init(
 			ETHCL_LOG("Creating one big buffer for the DAG");
 			m_dag = cl::Buffer(m_context, CL_MEM_READ_ONLY, _dagSize);
 			ETHCL_LOG("Loading single big chunk kernels");
-			m_hashKernel = cl::Kernel(program, "ethash_hash");
 			m_searchKernel = cl::Kernel(program, "ethash_search");
 			ETHCL_LOG("Mapping one big chunk.");
 			m_queue.enqueueWriteBuffer(m_dag, CL_TRUE, 0, _dagSize, _dag);

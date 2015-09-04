@@ -354,21 +354,6 @@ static hash32_t compute_hash(
 
 
 __attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
-__kernel void ethash_hash(
-	__global hash32_t* g_hashes,
-	__constant hash32_t const* g_header,
-	__global hash128_t const* g_dag,
-	ulong start_nonce,
-	uint isolate
-	)
-{
-	__local compute_hash_share share[HASHES_PER_LOOP];
-
-	uint const gid = get_global_id(0);
-	g_hashes[gid] = compute_hash(share, g_header, g_dag, start_nonce + gid, isolate);
-}
-
-__attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
 __kernel void ethash_search(
 	__global volatile uint* restrict g_output,
 	__constant hash32_t const* g_header,
