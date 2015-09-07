@@ -417,7 +417,6 @@ bool ethash_cl_miner::init(
 		for (unsigned i = 0; i != c_bufferCount; ++i)
 		{
 			ETHCL_LOG("Creating mining buffer " << i);
-			m_hashBuffer[i] = cl::Buffer(m_context, CL_MEM_WRITE_ONLY | (!m_openclOnePointOne ? CL_MEM_HOST_READ_ONLY : 0), 32 * c_hashBatchSize);
 			m_searchBuffer[i] = cl::Buffer(m_context, CL_MEM_WRITE_ONLY, (c_maxSearchResults + 1) * sizeof(uint32_t));
 		}
 	}
@@ -444,7 +443,13 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 		uint32_t const c_zero = 0;
 
 		// update header constant buffer
-		m_queue.enqueueWriteBuffer(m_header, false, 0, 32, header);
+		if (std::memcmp(m_headerData, header, 32) != 0)
+		{
+			ETHCL_LOG("Update block header buffer");
+			std::memcpy(m_headerData, header, 32);
+			m_queue.enqueueWriteBuffer(m_header, false, 0, 32, header);
+		}
+
 		for (unsigned i = 0; i != c_bufferCount; ++i)
 			m_queue.enqueueWriteBuffer(m_searchBuffer[i], false, 0, 4, &c_zero);
 

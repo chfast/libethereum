@@ -24,7 +24,7 @@
 class ethash_cl_miner
 {
 private:
-	enum { c_maxSearchResults = 63, c_bufferCount = 2, c_hashBatchSize = 1024 };
+	enum { c_maxSearchResults = 1, c_bufferCount = 1, c_hashBatchSize = 1024 };
 
 public:
 	struct search_hook
@@ -87,11 +87,11 @@ private:
 	cl::Kernel m_searchKernel;
 	cl::Buffer m_dag;
 	cl::Buffer m_header;
-	cl::Buffer m_hashBuffer[c_bufferCount];
 	cl::Buffer m_searchBuffer[c_bufferCount];
 	unsigned m_globalWorkSize;
 	bool m_openclOnePointOne;
 	unsigned m_deviceBits;
+	uint8_t m_headerData[32] = {};
 
 	/// The step used in the work size adjustment
 	unsigned int m_stepWorkSizeAdjust;
