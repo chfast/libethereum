@@ -87,7 +87,7 @@ private:
 	cl::Kernel m_searchKernel;
 	cl::Buffer m_dag;
 	cl::Buffer m_header;
-	cl::Buffer m_searchBuffer[c_bufferCount];
+	cl::Buffer m_searchBuffer;
 	unsigned m_globalWorkSize;
 	bool m_openclOnePointOne;
 	unsigned m_deviceBits;
