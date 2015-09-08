@@ -396,7 +396,6 @@ bool ethash_cl_miner::init(
 		string code(ETHASH_CL_MINER_KERNEL, ETHASH_CL_MINER_KERNEL + ETHASH_CL_MINER_KERNEL_SIZE);
 		addDefinition(code, "GROUP_SIZE", s_workgroupSize);
 		addDefinition(code, "DAG_SIZE", (unsigned)(_dagSize / ETHASH_MIX_BYTES));
-		addDefinition(code, "ACCESSES", ETHASH_ACCESSES);
 		addDefinition(code, "MAX_OUTPUTS", c_maxSearchResults);
 		//debugf("%s", code.c_str());
 
