@@ -583,7 +583,7 @@ private:
 #endif
 	}
 
-	void doSearch(MinerType _m)
+	void doSearch(std::string _m)
 	{
 		Ethash::BlockHeader genesis;
 		genesis.setDifficulty(1 << 30);
@@ -610,15 +610,11 @@ private:
 			return true;
 		});
 
-		string platformInfo = _m == MinerType::CPU ? "CPU" : "GPU";//EthashProofOfWork::CPUMiner::platformInfo() : _m == MinerType::GPU ? EthashProofOfWork::GPUMiner::platformInfo() : "";
-		cout << "Searching on platform: " << platformInfo << endl;
+		cout << "Searching on platform: " << _m << endl;
 
 		genesis.prep();
 		f.setWork(genesis);
-		if (_m == MinerType::CPU)
-			f.start("cpu");
-		else if (_m == MinerType::GPU)
-			f.start("opencl");
+		f.start(_m);
 
 		Timer t;
 		while (!finished)
