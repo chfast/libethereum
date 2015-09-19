@@ -52,36 +52,17 @@ static void keccak_f1600_round(uint2* a, uint r, uint out_size)
 	b[2] = a[2] ^ a[7] ^ a[12] ^ a[17] ^ a[22];
 	b[3] = a[3] ^ a[8] ^ a[13] ^ a[18] ^ a[23];
 	b[4] = a[4] ^ a[9] ^ a[14] ^ a[19] ^ a[24];
-	t = b[4] ^ (uint2)(b[1].x << 1 | b[1].y >> 31, b[1].y << 1 | b[1].x >> 31);
-	a[0] ^= t;
-	a[5] ^= t;
-	a[10] ^= t;
-	a[15] ^= t;
-	a[20] ^= t;
-	t = b[0] ^ (uint2)(b[2].x << 1 | b[2].y >> 31, b[2].y << 1 | b[2].x >> 31);
-	a[1] ^= t;
-	a[6] ^= t;
-	a[11] ^= t;
-	a[16] ^= t;
-	a[21] ^= t;
-	t = b[1] ^ (uint2)(b[3].x << 1 | b[3].y >> 31, b[3].y << 1 | b[3].x >> 31);
-	a[2] ^= t;
-	a[7] ^= t;
-	a[12] ^= t;
-	a[17] ^= t;
-	a[22] ^= t;
-	t = b[2] ^ (uint2)(b[4].x << 1 | b[4].y >> 31, b[4].y << 1 | b[4].x >> 31);
-	a[3] ^= t;
-	a[8] ^= t;
-	a[13] ^= t;
-	a[18] ^= t;
-	a[23] ^= t;
-	t = b[3] ^ (uint2)(b[0].x << 1 | b[0].y >> 31, b[0].y << 1 | b[0].x >> 31);
-	a[4] ^= t;
-	a[9] ^= t;
-	a[14] ^= t;
-	a[19] ^= t;
-	a[24] ^= t;
+
+	#pragma unroll
+	for (uint i = 0; i < 5; ++i)
+	{
+		t = b[(i+4)%5] ^ (uint2)(b[(i+1)%5].x << 1 | b[(i+1)%5].y >> 31, b[(i+1)%5].y << 1 | b[(i+1)%5].x >> 31);
+		a[0+i] ^= t;
+		a[5+i] ^= t;
+		a[10+i] ^= t;
+		a[15+i] ^= t;
+		a[20+i] ^= t;
+	}
 
 	// Rho Pi
 	b[0] = a[0];
@@ -181,13 +162,20 @@ static void keccak_f1600_no_absorb(ulong* a, uint in_size, uint out_size, uint i
 		// doesn't bother.
 		if (isolate)
 		{
-			keccak_f1600_round((uint2*)a, r++, 25);
+			if (r != 23)
+			{
+				keccak_f1600_round((uint2*)a, r, 25);
+				++r;
+			}
+			else
+			{
+				// final round optimised for digest size
+				keccak_f1600_round((uint2*)a, 23, out_size);
+				++r;
+			}
 		}
 	}
-	while (r < 23);
-
-	// final round optimised for digest size
-	keccak_f1600_round((uint2*)a, r++, out_size);
+	while (r < 24);
 }
 
 #define copy(dst, src, count) for (uint i = 0; i != count; ++i) { (dst)[i] = (src)[i]; }
@@ -196,7 +184,9 @@ static void keccak_f1600_no_absorb(ulong* a, uint in_size, uint out_size, uint i
 
 static uint fnv(uint x, uint y)
 {
-	return x * FNV_PRIME ^ y;
+	//return x * FNV_PRIME ^ y;
+	x += (x<<1) + (x<<4) + (x<<7) + (x<<8) + (x<<24);
+	return x ^ y;
 }
 
 static uint4 fnv4(uint4 x, uint4 y)
@@ -292,7 +282,7 @@ static uint inner_loop(uint4 init, uint thread_id, __local uint* share, __global
 	{
 		bool update_share = thread_id == (a/4) % THREADS_PER_HASH;
 
-		#pragma unroll
+		#pragma unroll 1
 		for (uint i = 0; i != 4; ++i)
 		{
 			if (update_share)
@@ -539,7 +529,7 @@ __kernel void ethash_search(
 
 	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
 	{
-		uint slot = min(MAX_OUTPUTS, atomic_inc(&g_output[0]) + 1);
+		uint slot = min(convert_uint(MAX_OUTPUTS), atomic_inc(&g_output[0]) + 1);
 		g_output[slot] = gid;
 	}
 }
