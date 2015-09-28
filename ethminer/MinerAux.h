@@ -97,7 +97,8 @@ public:
 		None,
 		DAGInit,
 		Benchmark,
-		Farm
+		Farm,
+		Search
 	};
 
 
@@ -277,6 +278,8 @@ public:
 		}
 		else if (arg == "-M" || arg == "--benchmark")
 			mode = OperationMode::Benchmark;
+		else if (arg == "--search")
+			mode = OperationMode::Search;
 		else if ((arg == "-t" || arg == "--mining-threads") && i + 1 < argc)
 		{
 			try {
@@ -331,6 +334,8 @@ public:
 			doBenchmark(m_minerType, m_phoneHome, m_benchmarkWarmup, m_benchmarkTrial, m_benchmarkTrials);
 		else if (mode == OperationMode::Farm)
 			doFarm(m_minerType, m_farmURL, m_farmRecheckPeriod);
+		else if (mode == OperationMode::Search)
+			doSearch(m_minerType);
 	}
 
 	static void streamHelp(ostream& _out)
@@ -394,7 +399,7 @@ private:
 	void doBenchmark(std::string _m, bool _phoneHome, unsigned _warmupDuration = 15, unsigned _trialDuration = 3, unsigned _trials = 5)
 	{
 		Ethash::BlockHeader genesis;
-		genesis.setDifficulty(1 << 18);
+		genesis.setDifficulty(1 << 21);
 		cdebug << genesis.boundary();
 
 		GenericFarm<EthashProofOfWork> f;
@@ -580,6 +585,47 @@ private:
 
 #endif
 		exit(0);
+	}
+
+	void doSearch(std::string _m)
+	{
+		Ethash::BlockHeader genesis;
+		genesis.setDifficulty(1 << 26);
+
+		GenericFarm<EthashProofOfWork> f;
+		map<string, GenericFarm<EthashProofOfWork>::SealerDescriptor> sealers;
+		sealers["cpu"] = GenericFarm<EthashProofOfWork>::SealerDescriptor{&EthashCPUMiner::instances, [](GenericMiner<EthashProofOfWork>::ConstructionInfo ci){ return new EthashCPUMiner(ci); }};
+#if ETH_ETHASHCL
+		sealers["opencl"] = GenericFarm<EthashProofOfWork>::SealerDescriptor{&EthashGPUMiner::instances, [](GenericMiner<EthashProofOfWork>::ConstructionInfo ci){ return new EthashGPUMiner(ci); }};
+#endif
+		f.setSealers(sealers);
+		auto finished = false;
+		f.onSolutionFound([&](EthashProofOfWork::Solution _solution)
+		{
+			finished = true;
+			cout << "Solution:    " << _solution.nonce << endl;
+			cout << "Header-hash: " << genesis.headerHash() << endl;
+			cout << "Seedhash:    " << genesis.seedHash() << endl;
+			cout << "Target:      " << genesis.boundary() << endl;
+			auto e = EthashAux::eval(genesis.seedHash(), genesis.hashWithout(), _solution.nonce);
+			cout << "PoW:         " << e.value << endl;
+			if (e.value >= genesis.boundary())
+				cout << "INCORRECT" << endl;
+			return true;
+		});
+
+		cout << "Searching on platform: " << _m << endl;
+
+		genesis.prep();
+		f.setWork(genesis);
+		f.start(_m);
+
+		Timer t;
+		while (!finished)
+			this_thread::sleep_for(chrono::milliseconds(10));
+
+		cout << "Finished in " << t.elapsed() << endl;
+		std::exit(0);
 	}
 
 	/// Operating mode.
