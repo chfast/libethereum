@@ -133,6 +133,103 @@ static void keccak_f1600_round(uint2* a, uint r, uint out_size)
    #endif
 }
 
+#define ROL2L(v, n) (uint2)(v.x << n | v.y >> (32 - n), v.y << n | v.x >> (32 - n))
+#define ROL2H(v, n) (uint2)(v.y << (n - 32) | v.x >> (64 - n), v.x  << (n - 32) | v.y >> (64 - n))
+
+static void keccak_f1600_round_nvidia(uint2* s, uint r, uint out_size)
+{
+   #if !__ENDIAN_LITTLE__
+	for (uint i = 0; i != 25; ++i)
+		s[i] = s[i].yx;
+   #endif
+
+	uint2 t[5], u, v;
+
+	/* theta: c = a[0,i] ^ a[1,i] ^ .. a[4,i] */
+	t[0] = s[0] ^ s[5] ^ s[10] ^ s[15] ^ s[20];
+	t[1] = s[1] ^ s[6] ^ s[11] ^ s[16] ^ s[21];
+	t[2] = s[2] ^ s[7] ^ s[12] ^ s[17] ^ s[22];
+	t[3] = s[3] ^ s[8] ^ s[13] ^ s[18] ^ s[23];
+	t[4] = s[4] ^ s[9] ^ s[14] ^ s[19] ^ s[24];
+
+	/* theta: d[i] = c[i+4] ^ rotl(c[i+1],1) */
+	/* theta: a[0,i], a[1,i], .. a[4,i] ^= d[i] */
+	u = t[4] ^ ROL2L(t[1], 1);
+	s[0] ^= u; s[5] ^= u; s[10] ^= u; s[15] ^= u; s[20] ^= u;
+	u = t[0] ^ ROL2L(t[2], 1);
+	s[1] ^= u; s[6] ^= u; s[11] ^= u; s[16] ^= u; s[21] ^= u;
+	u = t[1] ^ ROL2L(t[3], 1);
+	s[2] ^= u; s[7] ^= u; s[12] ^= u; s[17] ^= u; s[22] ^= u;
+	u = t[2] ^ ROL2L(t[4], 1);
+	s[3] ^= u; s[8] ^= u; s[13] ^= u; s[18] ^= u; s[23] ^= u;
+	u = t[3] ^ ROL2L(t[0], 1);
+	s[4] ^= u; s[9] ^= u; s[14] ^= u; s[19] ^= u; s[24] ^= u;
+
+	/* rho pi: b[..] = rotl(a[..], ..) */
+	u = s[1];
+
+	s[1] = ROL2H(s[6], 44);
+	s[6] = ROL2L(s[9], 20);
+	s[9] = ROL2H(s[22], 61);
+	s[22] = ROL2H(s[14], 39);
+	s[14] = ROL2L(s[20], 18);
+	s[20] = ROL2H(s[2], 62);
+	s[2] = ROL2H(s[12], 43);
+	s[12] = ROL2L(s[13], 25);
+	s[13] = ROL2L(s[19], 8);
+	s[19] = ROL2H(s[23], 56);
+	s[23] = ROL2H(s[15], 41);
+	s[15] = ROL2L(s[4], 27);
+	s[4] = ROL2L(s[24], 14);
+	s[24] = ROL2L(s[21], 2);
+	s[21] = ROL2H(s[8], 55);
+	s[8] = ROL2H(s[16], 45);
+	s[16] = ROL2H(s[5], 36);
+	s[5] = ROL2L(s[3], 28);
+	s[3] = ROL2L(s[18], 21);
+	s[18] = ROL2L(s[17], 15);
+	s[17] = ROL2L(s[11], 10);
+	s[11] = ROL2L(s[7], 6);
+	s[7] = ROL2L(s[10], 3);
+	s[10] = ROL2L(u, 1);
+
+	// squeeze this in here
+	/* chi: a[i,j] ^= ~b[i,j+1] & b[i,j+2] */
+	u = s[0]; v = s[1]; s[0] ^= (~v) & s[2];
+
+	/* iota: a[0,0] ^= round constant */
+
+	s[0] ^= Keccak_f1600_RC[r];
+	if (r == 23 && out_size == 4) // we only need s[0]
+	{
+#if !__ENDIAN_LITTLE__
+		s[0] = s[0].yx;
+#endif
+		return;
+	}
+	// continue chi
+	s[1] ^= (~s[2]) & s[3]; s[2] ^= (~s[3]) & s[4]; s[3] ^= (~s[4]) & u; s[4] ^= (~u) & v;
+	u = s[5]; v = s[6]; s[5] ^= (~v) & s[7]; s[6] ^= (~s[7]) & s[8]; s[7] ^= (~s[8]) & s[9];
+
+	if (r == 23) // out_size == 8
+	{
+#if !__ENDIAN_LITTLE__
+		for (uint i = 0; i != 8; ++i)
+			s[i] = s[i].yx;
+#endif
+		return;
+	}
+	s[8] ^= (~s[9]) & u; s[9] ^= (~u) & v;
+	u = s[10]; v = s[11]; s[10] ^= (~v) & s[12]; s[11] ^= (~s[12]) & s[13]; s[12] ^= (~s[13]) & s[14]; s[13] ^= (~s[14]) & u; s[14] ^= (~u) & v;
+	u = s[15]; v = s[16]; s[15] ^= (~v) & s[17]; s[16] ^= (~s[17]) & s[18]; s[17] ^= (~s[18]) & s[19]; s[18] ^= (~s[19]) & u; s[19] ^= (~u) & v;
+	u = s[20]; v = s[21]; s[20] ^= (~v) & s[22]; s[21] ^= (~s[22]) & s[23]; s[22] ^= (~s[23]) & s[24]; s[23] ^= (~s[24]) & u; s[24] ^= (~u) & v;
+
+#if !__ENDIAN_LITTLE__
+	for (uint i = 0; i != 25; ++i)
+		s[i] = s[i].yx;
+#endif
+}
+
 static void keccak_f1600_no_absorb(ulong* a, uint in_size, uint out_size, uint isolate)
 {
 	for (uint i = in_size; i != 25; ++i)
@@ -391,8 +488,7 @@ static hash32_t compute_hash(
 	uint const hash_id = (gid % GROUP_SIZE) / THREADS_PER_HASH;
 
 	hash32_t mix;
-	uint i = 0;
-	do
+	for (uint i = 0; i < THREADS_PER_HASH; ++i)
 	{
 		// share init with other threads
 		if (i == thread_id)
@@ -411,7 +507,6 @@ static hash32_t compute_hash(
 			mix = share[hash_id].mix;
 		barrier(CLK_LOCAL_MEM_FENCE);
 	}
-	while (++i != (THREADS_PER_HASH & isolate));
 
 	return final_hash(&init, &mix, isolate);
 }
