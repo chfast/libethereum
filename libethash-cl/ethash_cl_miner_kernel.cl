@@ -330,39 +330,6 @@ static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint i
 	return init;
 }
 
-static uint inner_loop_chunks(uint4 init, uint thread_id, __local uint* share, __global hash128_t const* g_dag, __global hash128_t const* g_dag1, __global hash128_t const* g_dag2, __global hash128_t const* g_dag3, uint isolate)
-{
-	uint4 mix = init;
-
-	// share init0
-	if (thread_id == 0)
-		*share = mix.x;
-	barrier(CLK_LOCAL_MEM_FENCE);
-	uint init0 = *share;
-
-	uint a = 0;
-	do
-	{
-		bool update_share = thread_id == (a/4) % THREADS_PER_HASH;
-
-		#pragma unroll
-		for (uint i = 0; i != 4; ++i)
-		{
-			if (update_share)
-			{
-				uint m[4] = { mix.x, mix.y, mix.z, mix.w };
-				*share = fnv(init0 ^ (a+i), m[i]) % DAG_SIZE;
-			}
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			mix = fnv4(mix, *share>=3 * DAG_SIZE / 4 ? g_dag3[*share - 3 * DAG_SIZE / 4].uint4s[thread_id] : *share>=DAG_SIZE / 2 ? g_dag2[*share - DAG_SIZE / 2].uint4s[thread_id] : *share>=DAG_SIZE / 4 ? g_dag1[*share - DAG_SIZE / 4].uint4s[thread_id]:g_dag[*share].uint4s[thread_id]);
-		}
-	} while ((a += 4) != (ACCESSES & isolate));
-
-	return fnv_reduce(mix);
-}
-
-
 
 static uint inner_loop(uint4 init, uint thread_id, __local uint* share, __global hash128_t const* g_dag, uint isolate)
 {
@@ -513,52 +480,6 @@ static hash32_t compute_hash(
 }
 
 
-static hash32_t compute_hash_chunks(
-	__local compute_hash_share* share,
-	__constant hash32_t const* g_header,
-	__global hash128_t const* g_dag,
-	__global hash128_t const* g_dag1,
-	__global hash128_t const* g_dag2,
-	__global hash128_t const* g_dag3,
-	ulong nonce,
-	uint isolate
-	)
-{
-	uint const gid = get_global_id(0);
-
-	// Compute one init hash per work item.
-	hash64_t init = init_hash(g_header, nonce, isolate);
-
-	// Threads work together in this phase in groups of 8.
-	uint const thread_id = gid % THREADS_PER_HASH;
-	uint const hash_id = (gid % GROUP_SIZE) / THREADS_PER_HASH;
-
-	hash32_t mix;
-	uint i = 0;
-	do
-	{
-		// share init with other threads
-		if (i == thread_id)
-			share[hash_id].init = init;
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		uint4 thread_init = share[hash_id].init.uint4s[thread_id % (64 / sizeof(uint4))];
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		uint thread_mix = inner_loop_chunks(thread_init, thread_id, share[hash_id].mix.uints, g_dag, g_dag1, g_dag2, g_dag3, isolate);
-
-		share[hash_id].mix.uints[thread_id] = thread_mix;
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		if (i == thread_id)
-			mix = share[hash_id].mix;
-		barrier(CLK_LOCAL_MEM_FENCE);
-	}
-	while (++i != (THREADS_PER_HASH & isolate));
-
-	return final_hash(&init, &mix, isolate);
-}
-
 __attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
 __kernel void ethash_hash_simple(
 	__global hash32_t* g_hashes,
@@ -626,49 +547,6 @@ __kernel void ethash_search(
 	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
 	{
 		uint slot = min(convert_uint(MAX_OUTPUTS), atomic_inc(&g_output[0]) + 1);
-		g_output[slot] = gid;
-	}
-}
-
-__attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
-__kernel void ethash_hash_chunks(
-	__global hash32_t* g_hashes,
-	__constant hash32_t const* g_header,
-	__global hash128_t const* g_dag,
-	__global hash128_t const* g_dag1,
-	__global hash128_t const* g_dag2,
-	__global hash128_t const* g_dag3,
-	ulong start_nonce,
-	uint isolate
-	)
-{
-	__local compute_hash_share share[HASHES_PER_LOOP];
-
-	uint const gid = get_global_id(0);
-	g_hashes[gid] = compute_hash_chunks(share, g_header, g_dag, g_dag1, g_dag2, g_dag3,start_nonce + gid, isolate);
-}
-
-__attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
-__kernel void ethash_search_chunks(
-	__global volatile uint* restrict g_output,
-	__constant hash32_t const* g_header,
-	__global hash128_t const* g_dag,
-	__global hash128_t const* g_dag1,
-	__global hash128_t const* g_dag2,
-	__global hash128_t const* g_dag3,
-	ulong start_nonce,
-	ulong target,
-	uint isolate
-	)
-{
-	__local compute_hash_share share[HASHES_PER_LOOP];
-
-	uint const gid = get_global_id(0);
-	hash32_t hash = compute_hash_chunks(share, g_header, g_dag, g_dag1, g_dag2, g_dag3, start_nonce + gid, isolate);
-
-	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
-	{
-		uint slot = min(convert_uint(MAX_OUTPUTS), convert_uint(atomic_inc(&g_output[0]) + 1));
 		g_output[slot] = gid;
 	}
 }
