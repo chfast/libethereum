@@ -488,6 +488,7 @@ static hash32_t compute_hash(
 	uint const hash_id = (gid % GROUP_SIZE) / THREADS_PER_HASH;
 
 	hash32_t mix;
+	#pragma unroll 1
 	for (uint i = 0; i < THREADS_PER_HASH; ++i)
 	{
 		// share init with other threads
