@@ -385,6 +385,49 @@ static hash32_t final_hash(hash64_t const* init, hash32_t const* mix, uint isola
 }
 
 
+static hash32_t compute_hash_simple(
+	__constant hash32_t const* g_header,
+	__global hash128_t const* g_dag,
+	ulong nonce,
+	uint isolate
+	)
+{
+	hash64_t init = init_hash(g_header, nonce, isolate);
+
+	hash128_t mix;
+	for (uint i = 0; i != countof(mix.uint4s); ++i)
+	{
+		mix.uint4s[i] = init.uint4s[i % countof(init.uint4s)];
+	}
+
+	uint mix_val = mix.uints[0];
+	uint init0 = mix.uints[0];
+	uint a = 0;
+	do
+	{
+		uint pi = fnv(init0 ^ a, mix_val) % DAG_SIZE;
+		uint n = (a+1) % countof(mix.uints);
+
+		#pragma unroll 1
+		for (uint i = 0; i != countof(mix.uints); ++i)
+		{
+			mix.uints[i] = fnv(mix.uints[i], g_dag[pi].uints[i]);
+			mix_val = i == n ? mix.uints[i] : mix_val;
+		}
+	}
+	while (++a != (ACCESSES & isolate));
+
+	// reduce to output
+	hash32_t fnv_mix;
+	for (uint i = 0; i != countof(fnv_mix.uints); ++i)
+	{
+		fnv_mix.uints[i] = fnv_reduce(mix.uint4s[i]);
+	}
+
+	return final_hash(&init, &fnv_mix, isolate);
+}
+
+
 typedef union
 {
 	struct
@@ -436,6 +479,27 @@ static hash32_t compute_hash(
 	}
 
 	return final_hash(&init, &mix, isolate);
+}
+
+
+__attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
+__kernel void ethash_search_simple(
+	__global volatile uint* restrict g_output,
+	__constant hash32_t const* g_header,
+	__global hash128_t const* g_dag,
+	ulong start_nonce,
+	ulong target,
+	uint isolate
+	)
+{
+	uint const gid = get_global_id(0);
+	hash32_t hash = compute_hash_simple(g_header, g_dag, start_nonce + gid, isolate);
+
+	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
+	{
+		uint slot = min(convert_uint(MAX_OUTPUTS), convert_uint(atomic_inc(&g_output[0]) + 1));
+		g_output[slot] = gid;
+	}
 }
 
 
