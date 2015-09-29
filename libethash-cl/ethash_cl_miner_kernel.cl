@@ -4,7 +4,7 @@
 // Bandwidth: 124533 MB/s
 // search kernel should fit in <= 84 VGPRS (3 wavefronts)
 
-#define THREADS_PER_HASH (128 / 16)
+#define THREADS_PER_HASH 8
 #define HASHES_PER_LOOP (GROUP_SIZE / THREADS_PER_HASH)
 
 #define FNV_PRIME	0x01000193
@@ -314,6 +314,12 @@ typedef union
 	uint4 uint4s[128 / sizeof(uint4)];
 } hash128_t;
 
+typedef struct
+{
+	hash64_t init;
+	hash32_t mix;
+} compute_hash_share;
+
 static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint isolate)
 {
 	hash64_t init;
@@ -385,6 +391,26 @@ static hash32_t final_hash(hash64_t const* init, hash32_t const* mix, uint isola
 }
 
 
+static hash32_t final_hash2(compute_hash_share const* data, uint isolate)
+{
+	ulong state[25];
+
+	hash32_t hash;
+	uint const hash_size = countof(hash.ulongs);
+	uint const init_size = countof(data->init.ulongs);
+	uint const mix_size = countof(data->mix.ulongs);
+
+	// keccak_256(keccak_512(header..nonce) .. mix);
+	copy(state, data->init.ulongs, init_size);
+	copy(state + init_size, data->mix.ulongs, mix_size);
+	keccak_f1600_no_absorb(state, init_size+mix_size, hash_size, isolate);
+
+	// copy out
+	copy(hash.ulongs, state, hash_size);
+	return hash;
+}
+
+
 static hash32_t compute_hash_simple(
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
@@ -428,17 +454,6 @@ static hash32_t compute_hash_simple(
 }
 
 
-typedef union
-{
-	struct
-	{
-		hash64_t init;
-		uint pad; // avoid lds bank conflicts
-	};
-	hash32_t mix;
-} compute_hash_share;
-
-
 static hash32_t compute_hash(
 	__local compute_hash_share* share,
 	__constant hash32_t const* g_header,
@@ -448,21 +463,21 @@ static hash32_t compute_hash(
 	)
 {
 	uint const gid = get_global_id(0);
+	compute_hash_share s;
 
 	// Compute one init hash per work item.
-	hash64_t init = init_hash(g_header, nonce, isolate);
+	s.init = init_hash(g_header, nonce, isolate);
 
 	// Threads work together in this phase in groups of 8.
 	uint const thread_id = gid % THREADS_PER_HASH;
 	uint const hash_id = (gid % GROUP_SIZE) / THREADS_PER_HASH;
 
-	hash32_t mix;
 	#pragma unroll 1
 	for (uint i = 0; i < THREADS_PER_HASH; ++i)
 	{
 		// share init with other threads
 		if (i == thread_id)
-			share[hash_id].init = init;
+			share[hash_id].init = s.init;
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		uint4 thread_init = share[hash_id].init.uint4s[thread_id % (64 / sizeof(uint4))];
@@ -474,11 +489,11 @@ static hash32_t compute_hash(
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		if (i == thread_id)
-			mix = share[hash_id].mix;
+			s.mix = share[hash_id].mix;
 		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 
-	return final_hash(&init, &mix, isolate);
+	return final_hash2(&s, isolate);
 }
 
 
