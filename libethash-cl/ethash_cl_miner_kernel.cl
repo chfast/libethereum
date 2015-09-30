@@ -84,33 +84,27 @@ static void keccak_f1600_round(uint2* a, uint r, uint out_size)
 	a[1] = bitselect(b[1] ^ b[3], b[1], b[2]);
 	a[2] = bitselect(b[2] ^ b[4], b[2], b[3]);
 	a[3] = bitselect(b[3] ^ b[0], b[3], b[4]);
-	if (out_size >= 4)
-	{
-		a[4] = bitselect(b[4] ^ b[1], b[4], b[0]);
-		a[5] = bitselect(b[5] ^ b[7], b[5], b[6]);
-		a[6] = bitselect(b[6] ^ b[8], b[6], b[7]);
-		a[7] = bitselect(b[7] ^ b[9], b[7], b[8]);
-		a[8] = bitselect(b[8] ^ b[5], b[8], b[9]);
-		if (out_size >= 8)
-		{
-			a[9] = bitselect(b[9] ^ b[6], b[9], b[5]);
-			a[10] = bitselect(b[10] ^ b[12], b[10], b[11]);
-			a[11] = bitselect(b[11] ^ b[13], b[11], b[12]);
-			a[12] = bitselect(b[12] ^ b[14], b[12], b[13]);
-			a[13] = bitselect(b[13] ^ b[10], b[13], b[14]);
-			a[14] = bitselect(b[14] ^ b[11], b[14], b[10]);
-			a[15] = bitselect(b[15] ^ b[17], b[15], b[16]);
-			a[16] = bitselect(b[16] ^ b[18], b[16], b[17]);
-			a[17] = bitselect(b[17] ^ b[19], b[17], b[18]);
-			a[18] = bitselect(b[18] ^ b[15], b[18], b[19]);
-			a[19] = bitselect(b[19] ^ b[16], b[19], b[15]);
-			a[20] = bitselect(b[20] ^ b[22], b[20], b[21]);
-			a[21] = bitselect(b[21] ^ b[23], b[21], b[22]);
-			a[22] = bitselect(b[22] ^ b[24], b[22], b[23]);
-			a[23] = bitselect(b[23] ^ b[20], b[23], b[24]);
-			a[24] = bitselect(b[24] ^ b[21], b[24], b[20]);
-		}
-	}
+	a[4] = bitselect(b[4] ^ b[1], b[4], b[0]);
+	a[5] = bitselect(b[5] ^ b[7], b[5], b[6]);
+	a[6] = bitselect(b[6] ^ b[8], b[6], b[7]);
+	a[7] = bitselect(b[7] ^ b[9], b[7], b[8]);
+	a[8] = bitselect(b[8] ^ b[5], b[8], b[9]);
+	a[9] = bitselect(b[9] ^ b[6], b[9], b[5]);
+	a[10] = bitselect(b[10] ^ b[12], b[10], b[11]);
+	a[11] = bitselect(b[11] ^ b[13], b[11], b[12]);
+	a[12] = bitselect(b[12] ^ b[14], b[12], b[13]);
+	a[13] = bitselect(b[13] ^ b[10], b[13], b[14]);
+	a[14] = bitselect(b[14] ^ b[11], b[14], b[10]);
+	a[15] = bitselect(b[15] ^ b[17], b[15], b[16]);
+	a[16] = bitselect(b[16] ^ b[18], b[16], b[17]);
+	a[17] = bitselect(b[17] ^ b[19], b[17], b[18]);
+	a[18] = bitselect(b[18] ^ b[15], b[18], b[19]);
+	a[19] = bitselect(b[19] ^ b[16], b[19], b[15]);
+	a[20] = bitselect(b[20] ^ b[22], b[20], b[21]);
+	a[21] = bitselect(b[21] ^ b[23], b[21], b[22]);
+	a[22] = bitselect(b[22] ^ b[24], b[22], b[23]);
+	a[23] = bitselect(b[23] ^ b[20], b[23], b[24]);
+	a[24] = bitselect(b[24] ^ b[21], b[24], b[20]);
 
 	// Iota
 	*(ulong*)a ^= Keccak_f1600_RC[r];
@@ -247,17 +241,8 @@ static void keccak_f1600_no_absorb(ulong* a, uint in_size, uint out_size, uint i
 		// doesn't bother.
 		if (isolate)
 		{
-			if (r != 23)
-			{
-				keccak_f1600_round((uint2*)a, r, 25);
-				++r;
-			}
-			else
-			{
-				// final round optimised for digest size
-				keccak_f1600_round((uint2*)a, 23, out_size);
-				++r;
-			}
+			keccak_f1600_round((uint2*)a, r, 25);
+			++r;
 		}
 	}
 	while (r < 24);
