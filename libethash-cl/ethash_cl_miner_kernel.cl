@@ -419,12 +419,11 @@ static hash32_t final_hash(hash64_t const* init, hash32_t const* mix, uint isola
 }
 
 
-static hash32_t final_hash2(compute_hash_share const* data, uint isolate)
+static ulong final_hash2(compute_hash_share const* data, uint isolate)
 {
 	ulong state[25];
 
-	hash32_t hash;
-	uint const hash_size = countof(hash.ulongs);
+	uint const hash_size = sizeof(hash32_t) / sizeof(ulong);
 	uint const init_size = countof(data->init.ulongs);
 	uint const mix_size = countof(data->mix.ulongs);
 
@@ -433,9 +432,7 @@ static hash32_t final_hash2(compute_hash_share const* data, uint isolate)
 	copy(state + init_size, data->mix.ulongs, mix_size);
 	keccak_f1600_no_absorb(state, init_size+mix_size, hash_size, isolate);
 
-	// copy out
-	copy(hash.ulongs, state, hash_size);
-	return hash;
+	return state[0];
 }
 
 
@@ -482,7 +479,7 @@ static hash32_t compute_hash_simple(
 }
 
 
-static hash32_t compute_hash(
+static ulong compute_hash(
 	__local compute_hash_share* share,
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
@@ -559,9 +556,9 @@ __kernel void ethash_search(
 	__local compute_hash_share share[HASHES_PER_LOOP];
 
 	uint const gid = get_global_id(0);
-	hash32_t hash = compute_hash(share, g_header, g_dag, start_nonce + gid, isolate);
+	ulong hash = compute_hash(share, g_header, g_dag, start_nonce + gid, isolate);
 
-	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
+	if (as_ulong(as_uchar8(hash).s76543210) < target)
 	{
 		uint slot = min(convert_uint(MAX_OUTPUTS), atomic_inc(&g_output[0]) + 1);
 		g_output[slot] = gid;
