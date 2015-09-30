@@ -9,31 +9,19 @@
 
 #define FNV_PRIME	0x01000193
 
-__constant uint2 const Keccak_f1600_RC[24] = {
-	(uint2)(0x00000001, 0x00000000),
-	(uint2)(0x00008082, 0x00000000),
-	(uint2)(0x0000808a, 0x80000000),
-	(uint2)(0x80008000, 0x80000000),
-	(uint2)(0x0000808b, 0x00000000),
-	(uint2)(0x80000001, 0x00000000),
-	(uint2)(0x80008081, 0x80000000),
-	(uint2)(0x00008009, 0x80000000),
-	(uint2)(0x0000008a, 0x00000000),
-	(uint2)(0x00000088, 0x00000000),
-	(uint2)(0x80008009, 0x00000000),
-	(uint2)(0x8000000a, 0x00000000),
-	(uint2)(0x8000808b, 0x00000000),
-	(uint2)(0x0000008b, 0x80000000),
-	(uint2)(0x00008089, 0x80000000),
-	(uint2)(0x00008003, 0x80000000),
-	(uint2)(0x00008002, 0x80000000),
-	(uint2)(0x00000080, 0x80000000),
-	(uint2)(0x0000800a, 0x00000000),
-	(uint2)(0x8000000a, 0x80000000),
-	(uint2)(0x80008081, 0x80000000),
-	(uint2)(0x00008080, 0x80000000),
-	(uint2)(0x80000001, 0x00000000),
-	(uint2)(0x80008008, 0x80000000),
+constant ulong Keccak_f1600_RC[] = {
+	(ulong)(0x0000000000000001), (ulong)(0x0000000000008082),
+	(ulong)(0x800000000000808A), (ulong)(0x8000000080008000),
+	(ulong)(0x000000000000808B), (ulong)(0x0000000080000001),
+	(ulong)(0x8000000080008081), (ulong)(0x8000000000008009),
+	(ulong)(0x000000000000008A), (ulong)(0x0000000000000088),
+	(ulong)(0x0000000080008009), (ulong)(0x000000008000000A),
+	(ulong)(0x000000008000808B), (ulong)(0x800000000000008B),
+	(ulong)(0x8000000000008089), (ulong)(0x8000000000008003),
+	(ulong)(0x8000000000008002), (ulong)(0x8000000000000080),
+	(ulong)(0x000000000000800A), (ulong)(0x800000008000000A),
+	(ulong)(0x8000000080008081), (ulong)(0x8000000000008080),
+	(ulong)(0x0000000080000001), (ulong)(0x8000000080008008)
 };
 
 static void keccak_f1600_round(uint2* a, uint r, uint out_size)
@@ -125,7 +113,7 @@ static void keccak_f1600_round(uint2* a, uint r, uint out_size)
 	}
 
 	// Iota
-	a[0] ^= Keccak_f1600_RC[r];
+	*(ulong*)a ^= Keccak_f1600_RC[r];
 
    #if !__ENDIAN_LITTLE__
 	for (uint i = 0; i != 25; ++i)
@@ -199,7 +187,7 @@ static void keccak_f1600_round_nvidia(uint2* s, uint r, uint out_size)
 
 	/* iota: a[0,0] ^= round constant */
 
-	s[0] ^= Keccak_f1600_RC[r];
+	*(ulong*)s ^= Keccak_f1600_RC[r];
 	if (r == 23 && out_size == 4) // we only need s[0]
 	{
 #if !__ENDIAN_LITTLE__
