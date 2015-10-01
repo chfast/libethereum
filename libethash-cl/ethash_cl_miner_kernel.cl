@@ -346,7 +346,7 @@ typedef struct
 {
 	hash64_t init;
 	hash32_t mix;
-} compute_hash_share;
+} hash_state;
 
 static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint isolate)
 {
@@ -420,7 +420,7 @@ static hash32_t final_hash(hash64_t const* init, hash32_t const* mix, uint isola
 }
 
 
-static ulong final_hash2(compute_hash_share const* data, uint isolate)
+static ulong final_hash2(hash_state const* data, uint isolate)
 {
 	ulong state[25];
 
@@ -429,7 +429,7 @@ static ulong final_hash2(compute_hash_share const* data, uint isolate)
 	uint const mix_size = countof(data->mix.ulongs);
 
 	// keccak_256(keccak_512(header..nonce) .. mix);
-	copy(state, data->init.ulongs, init_size);
+	copy(state, data->init.ulongs, init_size); //TODO: Eliminate this copy
 	copy(state + init_size, data->mix.ulongs, mix_size);
 	keccak_f1600_no_absorb(state, init_size+mix_size, hash_size, isolate);
 
@@ -481,7 +481,7 @@ static hash32_t compute_hash_simple(
 
 
 static ulong compute_hash(
-	__local compute_hash_share* share,
+	__local hash_state* share,
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
 	ulong nonce,
@@ -489,7 +489,7 @@ static ulong compute_hash(
 	)
 {
 	uint const gid = get_global_id(0);
-	compute_hash_share s;
+	hash_state s;
 
 	// Compute one init hash per work item.
 	s.init = init_hash(g_header, nonce, isolate);
@@ -552,7 +552,7 @@ __kernel void ethash_search(
 	uint isolate
 	)
 {
-	__local compute_hash_share share[HASHES_PER_LOOP];
+	__local hash_state share[HASHES_PER_LOOP];
 
 	uint const gid = get_global_id(0);
 	ulong hash = compute_hash(share, g_header, g_dag, start_nonce + gid, isolate);
