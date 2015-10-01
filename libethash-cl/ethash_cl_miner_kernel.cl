@@ -4,6 +4,7 @@
 // Bandwidth: 124533 MB/s
 // search kernel should fit in <= 84 VGPRS (3 wavefronts)
 
+#define ACCESSES 64
 #define THREADS_PER_HASH 8
 #define HASHES_PER_LOOP (GROUP_SIZE / THREADS_PER_HASH)
 
@@ -554,7 +555,7 @@ __kernel void ethash_search(
 
 	if (as_ulong(as_uchar8(hash).s76543210) < target)
 	{
-		uint slot = min(convert_uint(MAX_OUTPUTS), atomic_inc(&g_output[0]) + 1);
+		uint slot = min((uint)MAX_OUTPUTS, atomic_inc(&g_output[0]) + 1);
 		g_output[slot] = gid;
 	}
 }
