@@ -519,7 +519,7 @@ static ulong compute_hash(
 
 __attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
 __kernel void ethash_search_simple(
-	__global volatile uint* restrict g_output,
+	__global uint* restrict g_output,
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
 	ulong start_nonce,
@@ -531,16 +531,13 @@ __kernel void ethash_search_simple(
 	hash32_t hash = compute_hash_simple(g_header, g_dag, start_nonce + gid, isolate);
 
 	if (as_ulong(as_uchar8(hash.ulongs[0]).s76543210) < target)
-	{
-		uint slot = min(convert_uint(MAX_OUTPUTS), convert_uint(atomic_inc(&g_output[0]) + 1));
-		g_output[slot] = gid;
-	}
+		*g_output = gid;
 }
 
 
 __attribute__((reqd_work_group_size(GROUP_SIZE, 1, 1)))
 __kernel void ethash_search(
-	__global volatile uint* restrict g_output,
+	__global uint* restrict g_output,
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
 	ulong start_nonce,
@@ -554,8 +551,5 @@ __kernel void ethash_search(
 	ulong hash = compute_hash(share, g_header, g_dag, start_nonce + gid, isolate);
 
 	if (as_ulong(as_uchar8(hash).s76543210) < target)
-	{
-		uint slot = min((uint)MAX_OUTPUTS, atomic_inc(&g_output[0]) + 1);
-		g_output[slot] = gid;
-	}
+		*g_output = gid;
 }

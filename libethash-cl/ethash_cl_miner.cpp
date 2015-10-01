@@ -373,7 +373,6 @@ bool ethash_cl_miner::init(
 		string code(ETHASH_CL_MINER_KERNEL, ETHASH_CL_MINER_KERNEL + ETHASH_CL_MINER_KERNEL_SIZE);
 		addDefinition(code, "GROUP_SIZE", s_workgroupSize);
 		addDefinition(code, "DAG_SIZE", (unsigned)(_dagSize / ETHASH_MIX_BYTES));
-		addDefinition(code, "MAX_OUTPUTS", c_maxSearchResults);
 		//debugf("%s", code.c_str());
 
 		// create miner OpenCL program
@@ -414,7 +413,7 @@ bool ethash_cl_miner::init(
 
 		// create mining buffer
 		ETHCL_LOG("Creating mining buffer ");
-		m_searchBuffer = cl::Buffer(m_context, CL_MEM_WRITE_ONLY, (c_maxSearchResults + 1) * sizeof(uint32_t));
+		m_searchBuffer = cl::Buffer(m_context, CL_MEM_WRITE_ONLY, sizeof(uint32_t));
 	}
 	catch (cl::Error const& err)
 	{
@@ -437,8 +436,9 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 		}
 
 		// this can't be a static because in MacOSX OpenCL implementation a segfault occurs when a static is passed to OpenCL functions
-		uint32_t const c_zero = 0;
-		m_queue.enqueueWriteBuffer(m_searchBuffer, false, 0, 4, &c_zero);
+		static const uint32_t c_notFound = -1;
+		uint32_t result = c_notFound;
+		m_queue.enqueueWriteBuffer(m_searchBuffer, false, 0, sizeof(uint32_t), &result);
 
 #if CL_VERSION_1_2 && 0
 		cl::Event pre_return_event;
@@ -467,22 +467,21 @@ void ethash_cl_miner::search(uint8_t const* header, uint64_t target, search_hook
 
 			// read results
 			// could use pinned host pointer instead
-			uint32_t* results = (uint32_t*)m_queue.enqueueMapBuffer(m_searchBuffer, true, CL_MAP_READ, 0, (1 + c_maxSearchResults) * sizeof(uint32_t));
-			unsigned num_found = min<unsigned>(results[0], c_maxSearchResults);
+			m_queue.enqueueReadBuffer(m_searchBuffer, true, 0, sizeof(result), &result);
 
-			uint64_t nonces[c_maxSearchResults];
-			for (unsigned i = 0; i != num_found; ++i)
-				nonces[i] = start_nonce + results[i + 1];
+			bool exit = false;
+			if (result != c_notFound)
+			{
+				auto nonce = start_nonce + result;
+				exit = hook.found(&nonce, 1);
+				// reset search buffer if we're still going
+				result = c_notFound;
+				m_queue.enqueueWriteBuffer(m_searchBuffer, true, 0, 4, &result);
+			}
 
-			m_queue.enqueueUnmapMemObject(m_searchBuffer, results);
-			bool exit = num_found && hook.found(nonces, num_found);
 			exit |= hook.searched(start_nonce, m_globalWorkSize); // always report searched before exit
 			if (exit)
 				break;
-
-			// reset search buffer if we're still going
-			if (num_found)
-				m_queue.enqueueWriteBuffer(m_searchBuffer, true, 0, 4, &c_zero);
 
 			// adjust global work size depending on last search time
 			// if (s_msPerBatch)
