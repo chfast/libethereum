@@ -367,14 +367,15 @@ static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint i
 
 static uint inner_loop(uint4 init, uint thread_id, __local uint* share, __global hash128_t const* g_dag, uint isolate)
 {
-	uint4 mix = init;
 
 	// share init0
 	if (thread_id == 0)
-		*share = mix.x;
+		*share = init.x;
 	barrier(CLK_LOCAL_MEM_FENCE);
 	uint init0 = *share;
 
+
+	uint4 mix = init;
 	uint a = 0;
 	do
 	{
@@ -505,9 +506,7 @@ static ulong compute_hash(
 			share[hash_id].init = s.init;
 		barrier(CLK_LOCAL_MEM_FENCE);
 
-		uint4 thread_init = share[hash_id].init.uint4s[thread_id % (64 / sizeof(uint4))];
-		barrier(CLK_LOCAL_MEM_FENCE);
-
+		uint4 thread_init = share[hash_id].init.uint4s[thread_id % 4];
 		uint thread_mix = inner_loop(thread_init, thread_id, share[hash_id].mix.uints, g_dag, isolate);
 
 		share[hash_id].mix.uints[thread_id] = thread_mix;
