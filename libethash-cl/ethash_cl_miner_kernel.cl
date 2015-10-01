@@ -366,9 +366,10 @@ static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint i
 }
 
 
-static uint inner_loop(uint4 mix, uint thread_id, __local hash_state* share, __global hash128_t const* g_dag, uint isolate)
+static uint inner_loop(uint thread_id, __local hash_state* share, __global hash128_t const* g_dag, uint isolate)
 {
 	uint init0 = share->init.uints[0];
+	uint4 mix = share->init.uint4s[thread_id % 4]; // mix starts from [init init]
 
 	uint a = 0;
 	do
@@ -475,7 +476,7 @@ static hash32_t compute_hash_simple(
 
 
 static ulong compute_hash(
-	__local hash_state* share,
+	__local hash_state* shares,
 	__constant hash32_t const* g_header,
 	__global hash128_t const* g_dag,
 	ulong nonce,
@@ -491,23 +492,23 @@ static ulong compute_hash(
 	// Threads work together in this phase in groups of 8.
 	uint const thread_id = gid % THREADS_PER_HASH;
 	uint const hash_id = (gid % GROUP_SIZE) / THREADS_PER_HASH;
+	local hash_state* share = &shares[hash_id];
 
 	#pragma unroll 1
 	for (uint i = 0; i < THREADS_PER_HASH; ++i)
 	{
 		// share init with other threads
 		if (i == thread_id)
-			share[hash_id].init = s.init;
+			share->init = s.init;
 		barrier(CLK_LOCAL_MEM_FENCE);
 
-		uint4 thread_init = share[hash_id].init.uint4s[thread_id % 4];
-		uint thread_mix = inner_loop(thread_init, thread_id, &share[hash_id], g_dag, isolate);
+		uint thread_mix = inner_loop(thread_id, share, g_dag, isolate);
 
-		share[hash_id].mix.uints[thread_id] = thread_mix;
+		share->mix.uints[thread_id] = thread_mix;
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		if (i == thread_id)
-			s.mix = share[hash_id].mix;
+			s.mix = share->mix;
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
 
