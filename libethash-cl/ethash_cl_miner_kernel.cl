@@ -333,6 +333,7 @@ typedef union
 typedef union
 {
 	ulong ulongs[64 / sizeof(ulong)];
+	uint  uints [64 / sizeof(uint)];
 	uint4 uint4s[64 / sizeof(uint4)];
 } hash64_t;
 
@@ -365,17 +366,10 @@ static hash64_t init_hash(__constant hash32_t const* header, ulong nonce, uint i
 }
 
 
-static uint inner_loop(uint4 init, uint thread_id, __local uint* share, __global hash128_t const* g_dag, uint isolate)
+static uint inner_loop(uint4 mix, uint thread_id, __local hash_state* share, __global hash128_t const* g_dag, uint isolate)
 {
+	uint init0 = share->init.uints[0];
 
-	// share init0
-	if (thread_id == 0)
-		*share = init.x;
-	barrier(CLK_LOCAL_MEM_FENCE);
-	uint init0 = *share;
-
-
-	uint4 mix = init;
 	uint a = 0;
 	do
 	{
@@ -387,11 +381,11 @@ static uint inner_loop(uint4 init, uint thread_id, __local uint* share, __global
 			if (update_share)
 			{
 				uint m[4] = { mix.x, mix.y, mix.z, mix.w };
-				*share = fnv(init0 ^ (a+i), m[i]) % DAG_SIZE;
+				share->mix.uints[0] = fnv(init0 ^ (a+i), m[i]) % DAG_SIZE;
 			}
 			barrier(CLK_LOCAL_MEM_FENCE);
 
-			mix = fnv4(mix, g_dag[*share].uint4s[thread_id]);
+			mix = fnv4(mix, g_dag[share->mix.uints[0]].uint4s[thread_id]);
 		}
 	}
 	while ((a += 4) != (ACCESSES & isolate));
@@ -507,7 +501,7 @@ static ulong compute_hash(
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		uint4 thread_init = share[hash_id].init.uint4s[thread_id % 4];
-		uint thread_mix = inner_loop(thread_init, thread_id, share[hash_id].mix.uints, g_dag, isolate);
+		uint thread_mix = inner_loop(thread_init, thread_id, &share[hash_id], g_dag, isolate);
 
 		share[hash_id].mix.uints[thread_id] = thread_mix;
 		barrier(CLK_LOCAL_MEM_FENCE);
