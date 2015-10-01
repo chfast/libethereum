@@ -508,8 +508,8 @@ static ulong compute_hash(
 
 		if (i == thread_id)
 			s.mix = share[hash_id].mix;
-		barrier(CLK_LOCAL_MEM_FENCE);
 	}
+	barrier(CLK_LOCAL_MEM_FENCE);
 
 	return final_hash2(&s, isolate);
 }
