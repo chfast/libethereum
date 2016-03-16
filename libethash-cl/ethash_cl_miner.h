@@ -89,6 +89,7 @@ private:
 	cl::Buffer m_header;
 	cl::Buffer m_searchBuffer;
 	unsigned m_globalWorkSize;
+	uint64_t m_startNonce = 0;
 	bool m_openclOnePointOne;
 	unsigned m_deviceBits;
 	uint8_t m_headerData[32] = {};
