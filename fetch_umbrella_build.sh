@@ -13,4 +13,3 @@ mkdir build
 cd build
 cmake .. -DGUI=0 -DCMAKE_BUILD_TYPE=$TRAVIS_BUILD_TYPE
 make -j 2 eth ethvm testeth
-./libethereum/test/testeth
