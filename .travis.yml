@@ -22,4 +22,4 @@ branches:
 before_install: ./install_dependencies.sh
 script:
     - ./fetch_umbrella_build.sh
-    - ./libethereum/test/testeth --verbosity 2
+    - ./webthree-umbrella/build/libethereum/test/testeth --verbosity 2
